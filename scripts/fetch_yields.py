@@ -27,18 +27,19 @@ HEADERS = {
 CACHE = Path(__file__).parent / "_cache" / "yields"
 
 
-def fetch_csv(series_id: str, retries: int = 4) -> str | None:
+def fetch_csv(series_id: str, retries: int = 3) -> str | None:
+    """Fail fast on a single series so one bad country can't stall the run."""
     url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
     for attempt in range(retries):
         try:
-            r = requests.get(url, headers=HEADERS, timeout=60)
+            r = requests.get(url, headers=HEADERS, timeout=20)
             if r.status_code == 404:
                 return None
             r.raise_for_status()
             return r.text
         except requests.RequestException as e:
-            LOG.debug("%s attempt %d failed: %s", series_id, attempt + 1, e)
-        time.sleep(2.0 * (attempt + 1))
+            LOG.warning("%s attempt %d/%d failed: %s", series_id, attempt + 1, retries, e)
+        time.sleep(1.0 + attempt)
     return None
 
 

@@ -13,6 +13,8 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    env:
+      PYTHONUNBUFFERED: '1'   # stream per-country progress to Actions log
     steps:
       - uses: actions/checkout@v4
 
