@@ -14,10 +14,16 @@ const MAGNITUDES = [
 ];
 
 const CURRENCIES = [
-  { id: 'all',     label: 'All currencies' },
-  { id: 'no_usd',  label: 'Exclude USD' },
-  { id: 'no_eur',  label: 'Exclude EUR' },
-  { id: 'no_both', label: 'Exclude USD & EUR' },
+  { id: 'all',            label: 'All' },
+  { id: 'no_usd',         label: 'Excl. USD' },
+  { id: 'no_eur',         label: 'Excl. EUR' },
+  { id: 'no_eur_keep_de', label: 'Excl. EUR (keep DE)' },
+  { id: 'no_both',        label: 'Excl. USD & EUR' },
+];
+
+const YIELDS = [
+  { id: 'any',  label: 'All' },
+  { id: 'only', label: 'With chart' },
 ];
 
 function ToggleSet({ options, selected, onToggle, mode = 'multi' }) {
@@ -75,6 +81,14 @@ export default function Filters({ filters, setFilters }) {
         <ToggleSet
           options={CURRENCIES} selected={filters.currency} mode="single"
           onToggle={id => setFilters(f => ({ ...f, currency: id }))}
+        />
+      </div>
+
+      <div className="filter-group">
+        <span className="filter-label">Yield data</span>
+        <ToggleSet
+          options={YIELDS} selected={filters.yields} mode="single"
+          onToggle={id => setFilters(f => ({ ...f, yields: id }))}
         />
       </div>
     </div>

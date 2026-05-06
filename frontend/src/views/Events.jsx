@@ -11,6 +11,7 @@ const DEFAULT_FILTERS = {
   direction: 'all',
   magnitude: 'any',
   currency: 'all',
+  yields: 'any',
 };
 
 function matchesFilters(ev, f) {
@@ -30,9 +31,13 @@ function matchesFilters(ev, f) {
   }
 
   const ccy = ev.currency_at_event;
+  const iso = ev.country_iso2;
   if (f.currency === 'no_usd' && ccy === 'USD') return false;
   if (f.currency === 'no_eur' && ccy === 'EUR') return false;
+  if (f.currency === 'no_eur_keep_de' && ccy === 'EUR' && iso !== 'DE') return false;
   if (f.currency === 'no_both' && (ccy === 'USD' || ccy === 'EUR')) return false;
+
+  if (f.yields === 'only' && (!ev.yields || ev.yields.length === 0)) return false;
 
   return true;
 }
@@ -52,7 +57,7 @@ function notchBadge(ev) {
   return <span className={`badge ${cls}`}>{sign}{ev.notches}</span>;
 }
 
-function StatsStrip({ stats, totalCount, matchedCount }) {
+function StatsStrip({ stats, totalCount, matchedCount, currencyCounts }) {
   const moveClass = stats.move_mean > 0 ? 'up' : stats.move_mean < 0 ? 'down' : '';
   return (
     <div className="stats">
@@ -74,6 +79,18 @@ function StatsStrip({ stats, totalCount, matchedCount }) {
           {fmtBps(stats.range_mean)} <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 400 }}>± {fmtBps(stats.range_std)}</span>
         </span>
         <span className="stat-note">bps, max − min in ±12mo</span>
+      </div>
+      <div className="stat" style={{ flex: 1, minWidth: 220 }}>
+        <span className="stat-label">Currencies in set</span>
+        <div className="ccy-chips">
+          {currencyCounts.length === 0
+            ? <span className="stat-note" style={{ paddingTop: 2 }}>—</span>
+            : currencyCounts.map(([ccy, n]) => (
+                <span key={ccy} className="ccy-chip">
+                  {ccy}<span className="ccy-chip-n">{n}</span>
+                </span>
+              ))}
+        </div>
       </div>
     </div>
   );
@@ -117,6 +134,14 @@ export default function Events() {
   }, [data, filters]);
 
   const stats = useMemo(() => computeStats(filtered), [filtered]);
+
+  const currencyCounts = useMemo(() => {
+    const m = new Map();
+    for (const ev of filtered) {
+      m.set(ev.currency_at_event, (m.get(ev.currency_at_event) || 0) + 1);
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [filtered]);
   // Default selection = most recent event that actually has a yield window,
   // so the chart isn't empty when you land on the page.
   const firstWithYields = filtered.find(e => e.yields && e.yields.length > 0);
@@ -132,6 +157,7 @@ export default function Events() {
         stats={stats}
         totalCount={data.events.length}
         matchedCount={filtered.length}
+        currencyCounts={currencyCounts}
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.3fr)', gap: 16 }}>

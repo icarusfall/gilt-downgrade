@@ -149,6 +149,33 @@
   font-family: 'JetBrains Mono', monospace;
 }
 
+.ccy-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+}
+
+.ccy-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+}
+
+.ccy-chip-n {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 10px;
+}
+
 /* Event table */
 .events-panel {
   border: 1px solid var(--border);
