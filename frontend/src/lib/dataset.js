@@ -75,6 +75,13 @@ export function hasUsefulYields(ev) {
   return pre.length >= MIN_PRE_POINTS && post.length >= MIN_POST_POINTS;
 }
 
+/** Pre/post means in pct (not bps), or null if either side is too sparse. */
+export function eventPrePostMeans(ev) {
+  const { pre, post } = splitWindow(ev);
+  if (pre.length < MIN_PRE_POINTS || post.length < MIN_POST_POINTS) return null;
+  return { pre_mean: mean(pre), post_mean: mean(post) };
+}
+
 /**
  * Per-event "net 12mo yield move" = mean(post-event yields) − mean(pre-event
  * yields), in bps. Returns null if the window doesn't meet the minimum

@@ -3,7 +3,8 @@ import Plot from '../lib/Plot';
 import Filters from '../components/Filters';
 import {
   loadDataset, PLOT_LAYOUT_DEFAULTS, AGENCY_COLOR,
-  eventDirection, computeStats, eventMove, hasUsefulYields, fmtBps,
+  eventDirection, computeStats, eventMove, hasUsefulYields,
+  eventPrePostMeans, fmtBps,
 } from '../lib/dataset';
 
 const DEFAULT_FILTERS = {
@@ -322,16 +323,68 @@ function EventDetail({ event, country, lastYieldDate }) {
   if (!event) {
     return <div className="detail-panel detail-empty">Select an event to view its yield window.</div>;
   }
-  const traces = event.yields && event.yields.length ? [{
-    x: event.yields.map(p => p.date),
-    y: event.yields.map(p => p.y),
-    type: 'scatter',
-    mode: 'lines+markers',
-    line: { color: AGENCY_COLOR[event.agency] || '#1d4ed8', width: 2 },
-    marker: { size: 4 },
-    name: '10y yield',
-    hovertemplate: '%{x|%Y-%m-%d}<br>%{y:.2f}%<extra></extra>',
-  }] : [];
+  const traces = [];
+  let annotations = [{
+    x: event.date, yref: 'paper', y: 1.02,
+    text: 'rating action', showarrow: false,
+    font: { size: 10, color: '#b91c1c' },
+  }];
+
+  if (event.yields && event.yields.length) {
+    traces.push({
+      x: event.yields.map(p => p.date),
+      y: event.yields.map(p => p.y),
+      type: 'scatter',
+      mode: 'lines+markers',
+      line: { color: AGENCY_COLOR[event.agency] || '#1d4ed8', width: 2 },
+      marker: { size: 4 },
+      name: '10y yield',
+      hovertemplate: '%{x|%Y-%m-%d}<br>%{y:.2f}%<extra></extra>',
+    });
+
+    // Pre/post mean overlays — make the "net move" stat literally visible
+    const means = eventPrePostMeans(event);
+    if (means) {
+      const preDates = event.yields.filter(p => p.date <= event.date);
+      const postDates = event.yields.filter(p => p.date > event.date);
+      const firstPre = preDates[0].date;
+      const lastPost = postDates[postDates.length - 1].date;
+      const move = (means.post_mean - means.pre_mean) * 100;   // bps
+      const postColor = move > 5 ? '#b91c1c' : move < -5 ? '#15803d' : '#78716c';
+
+      traces.push({
+        x: [firstPre, event.date],
+        y: [means.pre_mean, means.pre_mean],
+        type: 'scatter', mode: 'lines',
+        line: { color: '#78716c', width: 1.5, dash: 'dash' },
+        name: `pre avg ${means.pre_mean.toFixed(2)}%`,
+        hovertemplate: `pre-event mean: %{y:.2f}%<extra></extra>`,
+      });
+      traces.push({
+        x: [event.date, lastPost],
+        y: [means.post_mean, means.post_mean],
+        type: 'scatter', mode: 'lines',
+        line: { color: postColor, width: 1.5, dash: 'dash' },
+        name: `post avg ${means.post_mean.toFixed(2)}% (${fmtBps(move)} bps)`,
+        hovertemplate: `post-event mean: %{y:.2f}%<extra></extra>`,
+      });
+
+      annotations.push({
+        x: firstPre, y: means.pre_mean, xanchor: 'left', yanchor: 'bottom',
+        text: `${means.pre_mean.toFixed(2)}%`,
+        showarrow: false,
+        font: { size: 10, color: '#59544c', family: 'JetBrains Mono, monospace' },
+        bgcolor: 'rgba(255,255,255,0.85)', borderpad: 2,
+      });
+      annotations.push({
+        x: lastPost, y: means.post_mean, xanchor: 'right', yanchor: 'bottom',
+        text: `${means.post_mean.toFixed(2)}% (${fmtBps(move)} bps)`,
+        showarrow: false,
+        font: { size: 10, color: postColor, family: 'JetBrains Mono, monospace' },
+        bgcolor: 'rgba(255,255,255,0.85)', borderpad: 2,
+      });
+    }
+  }
 
   const layout = {
     ...PLOT_LAYOUT_DEFAULTS,
@@ -342,11 +395,8 @@ function EventDetail({ event, country, lastYieldDate }) {
       yref: 'paper', y0: 0, y1: 1,
       line: { color: '#b91c1c', width: 1.5, dash: 'dash' },
     }],
-    annotations: [{
-      x: event.date, yref: 'paper', y: 1.02,
-      text: 'rating action', showarrow: false,
-      font: { size: 10, color: '#b91c1c' },
-    }],
+    annotations,
+    showlegend: false,   // legend would crowd the chart; values live in annotations
   };
 
   return (
