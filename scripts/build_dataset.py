@@ -158,7 +158,7 @@ def main():
             "name": c.name,
             "currency_today": "EUR" if c.eurozone else c.currency,
             "eurozone_join": c.eurozone.isoformat() if c.eurozone else None,
-            "has_yields": c.fred_id is not None,
+            "has_yields": c.oecd_mei,
         }
         for c in COUNTRIES_BY_ISO.values()
     ]

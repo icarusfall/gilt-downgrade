@@ -1,13 +1,19 @@
-"""Download monthly 10y government bond yields from FRED.
+"""Download monthly 10y government bond yields via DBNomics.
 
-Series pattern: IRLTLT01{ISO2}M156N (OECD-sourced harmonized long-term yields).
-We store one CSV per country in scripts/_cache/yields/{ISO2}.csv.
+DBNomics mirrors the OECD Main Economic Indicators (MEI) database and exposes
+it as a free no-key JSON API. Series structure for each country (ISO3):
 
-Output combined dataset: list of {country_iso2, date, yield_pct} sorted by date.
+    https://api.db.nomics.world/v22/series/OECD/MEI/{ISO3}.IRLTLT01.ST.M
+
+Caveat: OECD restructured the MEI dataset and the DBNomics mirror currently
+ends in early 2024. Events from 2024 onwards will be missing the forward half
+of their +/-12mo window. We previously used FRED's CSV endpoint (current data)
+but FRED's unauthenticated endpoint became unreliable in mid-2026.
+
+Output: scripts/_cache/yields_raw.json — list of {country_iso2, date, yield_pct}.
 """
 from __future__ import annotations
 
-import csv
 import json
 import logging
 import sys
@@ -19,48 +25,40 @@ import requests
 from countries import COUNTRIES
 
 LOG = logging.getLogger("fetch_yields")
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (gilt-downgrade research)",
-    "Accept": "text/csv,*/*",
-    "Connection": "close",
-}
-CACHE = Path(__file__).parent / "_cache" / "yields"
+HEADERS = {"User-Agent": "gilt-downgrade/0.1 (research)", "Connection": "close"}
+CACHE = Path(__file__).parent / "_cache"
 
 
-def fetch_csv(series_id: str, retries: int = 3) -> str | None:
-    """Fail fast on a single series so one bad country can't stall the run."""
-    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+def fetch_series(iso3: str, retries: int = 3) -> list[tuple[str, float]] | None:
+    """Return [(YYYY-MM-DD, yield_pct)] or None if unavailable."""
+    url = f"https://api.db.nomics.world/v22/series/OECD/MEI/{iso3}.IRLTLT01.ST.M?observations=1"
     for attempt in range(retries):
         try:
             r = requests.get(url, headers=HEADERS, timeout=20)
             if r.status_code == 404:
                 return None
             r.raise_for_status()
-            return r.text
+            payload = r.json()
+            docs = payload.get("series", {}).get("docs", [])
+            if not docs:
+                return None
+            doc = docs[0]
+            periods = doc.get("period", []) or []
+            values = doc.get("value", []) or []
+            out: list[tuple[str, float]] = []
+            for p, v in zip(periods, values):
+                # period is "YYYY-MM"; v may be the string "NA" for missing months
+                if v is None or v == "NA":
+                    continue
+                try:
+                    out.append((f"{p}-01", float(v)))
+                except (TypeError, ValueError):
+                    continue
+            return out
         except requests.RequestException as e:
-            LOG.warning("%s attempt %d/%d failed: %s", series_id, attempt + 1, retries, e)
+            LOG.warning("%s attempt %d/%d failed: %s", iso3, attempt + 1, retries, e)
         time.sleep(1.0 + attempt)
     return None
-
-
-def parse_csv(body: str) -> list[tuple[str, float]]:
-    """Return [(YYYY-MM-DD, yield_pct)]; skips '.' (FRED missing-value marker)."""
-    rows: list[tuple[str, float]] = []
-    reader = csv.reader(body.splitlines())
-    header = next(reader, None)
-    if not header or header[0].upper() not in ("DATE", "OBSERVATION_DATE"):
-        return rows
-    for row in reader:
-        if len(row) < 2:
-            continue
-        d, v = row[0], row[1]
-        if v in (".", ""):
-            continue
-        try:
-            rows.append((d, float(v)))
-        except ValueError:
-            continue
-    return rows
 
 
 def main():
@@ -70,28 +68,25 @@ def main():
     combined: list[dict] = []
     missing: list[str] = []
     for c in COUNTRIES:
-        if not c.fred_id:
+        if not c.oecd_mei:
             missing.append(c.iso2)
             continue
-        body = fetch_csv(c.fred_id)
-        if not body:
-            LOG.warning("%s: download failed", c.iso2)
+        rows = fetch_series(c.iso3)
+        if rows is None:
+            LOG.warning("%s (%s): no data", c.iso2, c.iso3)
             missing.append(c.iso2)
             continue
-        cache_file = CACHE / f"{c.iso2}.csv"
-        cache_file.write_text(body)
-        rows = parse_csv(body)
         for d, v in rows:
             combined.append({"country_iso2": c.iso2, "date": d, "yield_pct": v})
         LOG.info("%s: %d points (%s -> %s)", c.iso2, len(rows),
                  rows[0][0] if rows else "-", rows[-1][0] if rows else "-")
-        time.sleep(0.3)
+        time.sleep(0.2)
 
-    out_path = CACHE.parent / "yields_raw.json"
+    out_path = CACHE / "yields_raw.json"
     out_path.write_text(json.dumps(combined, indent=2))
     LOG.info("Wrote %d total points to %s", len(combined), out_path)
     if missing:
-        LOG.info("No FRED series for: %s", ", ".join(missing))
+        LOG.info("No yield series for: %s", ", ".join(missing))
 
 
 if __name__ == "__main__":

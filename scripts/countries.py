@@ -4,11 +4,12 @@ Universe = IMF advanced economies (April 2026 list, 43 countries).
 We drop a handful of micro-states with no real sovereign debt market.
 
 For each country we track:
-  - iso2:        ISO 3166-1 alpha-2 (used as primary key)
+  - iso2:        ISO 3166-1 alpha-2 (used as primary key + currency_at_event)
+  - iso3:        ISO 3166-1 alpha-3 (used by DBNomics OECD/MEI series)
   - name:        display name
   - slug:        URL slug for countryeconomy.com (/ratings/<slug>)
-  - fred_id:     FRED series ID for 10y govt bond yield (None if unavailable)
-  - currency:    issuing currency today
+  - oecd_mei:    True if covered by OECD MEI 10y harmonised yield (most G20 + EU)
+  - currency:    issuing currency today (sovereign's local code)
   - eurozone:    date country adopted the euro (None if never / not yet)
 """
 from datetime import date
@@ -18,9 +19,10 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Country:
     iso2: str
+    iso3: str
     name: str
     slug: str
-    fred_id: str | None
+    oecd_mei: bool
     currency: str
     eurozone: date | None = None
 
@@ -34,50 +36,50 @@ class Country:
 # fmt: off
 COUNTRIES: list[Country] = [
     # G7 + other large advanced
-    Country("US", "United States",   "usa",            "IRLTLT01USM156N", "USD"),
-    Country("GB", "United Kingdom",  "uk",             "IRLTLT01GBM156N", "GBP"),
-    Country("JP", "Japan",           "japan",          "IRLTLT01JPM156N", "JPY"),
-    Country("DE", "Germany",         "germany",        "IRLTLT01DEM156N", "DEM", date(1999, 1, 1)),
-    Country("FR", "France",          "france",         "IRLTLT01FRM156N", "FRF", date(1999, 1, 1)),
-    Country("IT", "Italy",           "italy",          "IRLTLT01ITM156N", "ITL", date(1999, 1, 1)),
-    Country("ES", "Spain",           "spain",          "IRLTLT01ESM156N", "ESP", date(1999, 1, 1)),
-    Country("CA", "Canada",          "canada",         "IRLTLT01CAM156N", "CAD"),
-    Country("AU", "Australia",       "australia",      "IRLTLT01AUM156N", "AUD"),
-    Country("KR", "South Korea",     "south-korea",    "IRLTLT01KRM156N", "KRW"),
-    Country("CH", "Switzerland",     "switzerland",    "IRLTLT01CHM156N", "CHF"),
+    Country("US", "USA", "United States",   "usa",            True,  "USD"),
+    Country("GB", "GBR", "United Kingdom",  "uk",             True,  "GBP"),
+    Country("JP", "JPN", "Japan",           "japan",          True,  "JPY"),
+    Country("DE", "DEU", "Germany",         "germany",        True,  "DEM", date(1999, 1, 1)),
+    Country("FR", "FRA", "France",          "france",         True,  "FRF", date(1999, 1, 1)),
+    Country("IT", "ITA", "Italy",           "italy",          True,  "ITL", date(1999, 1, 1)),
+    Country("ES", "ESP", "Spain",           "spain",          True,  "ESP", date(1999, 1, 1)),
+    Country("CA", "CAN", "Canada",          "canada",         True,  "CAD"),
+    Country("AU", "AUS", "Australia",       "australia",      True,  "AUD"),
+    Country("KR", "KOR", "South Korea",     "south-korea",    True,  "KRW"),
+    Country("CH", "CHE", "Switzerland",     "switzerland",    True,  "CHF"),
 
     # Nordics
-    Country("SE", "Sweden",          "sweden",         "IRLTLT01SEM156N", "SEK"),
-    Country("NO", "Norway",          "norway",         "IRLTLT01NOM156N", "NOK"),
-    Country("DK", "Denmark",         "denmark",        "IRLTLT01DKM156N", "DKK"),
-    Country("FI", "Finland",         "finland",        "IRLTLT01FIM156N", "FIM", date(1999, 1, 1)),
-    Country("IS", "Iceland",         "iceland",        "IRLTLT01ISM156N", "ISK"),
+    Country("SE", "SWE", "Sweden",          "sweden",         True,  "SEK"),
+    Country("NO", "NOR", "Norway",          "norway",         True,  "NOK"),
+    Country("DK", "DNK", "Denmark",         "denmark",        True,  "DKK"),
+    Country("FI", "FIN", "Finland",         "finland",        True,  "FIM", date(1999, 1, 1)),
+    Country("IS", "ISL", "Iceland",         "iceland",        True,  "ISK"),
 
     # Other Eurozone
-    Country("NL", "Netherlands",     "netherlands",    "IRLTLT01NLM156N", "NLG", date(1999, 1, 1)),
-    Country("BE", "Belgium",         "belgium",        "IRLTLT01BEM156N", "BEF", date(1999, 1, 1)),
-    Country("AT", "Austria",         "austria",        "IRLTLT01ATM156N", "ATS", date(1999, 1, 1)),
-    Country("PT", "Portugal",        "portugal",       "IRLTLT01PTM156N", "PTE", date(1999, 1, 1)),
-    Country("IE", "Ireland",         "ireland",        "IRLTLT01IEM156N", "IEP", date(1999, 1, 1)),
-    Country("GR", "Greece",          "greece",         "IRLTLT01GRM156N", "GRD", date(2001, 1, 1)),
-    Country("LU", "Luxembourg",      "luxembourg",     "IRLTLT01LUM156N", "LUF", date(1999, 1, 1)),
-    Country("SI", "Slovenia",        "slovenia",       "IRLTLT01SIM156N", "SIT", date(2007, 1, 1)),
-    Country("SK", "Slovakia",        "slovakia",       "IRLTLT01SKM156N", "SKK", date(2009, 1, 1)),
-    Country("EE", "Estonia",         "estonia",        None,              "EEK", date(2011, 1, 1)),
-    Country("LV", "Latvia",          "latvia",         None,              "LVL", date(2014, 1, 1)),
-    Country("LT", "Lithuania",       "lithuania",      None,              "LTL", date(2015, 1, 1)),
-    Country("CY", "Cyprus",          "cyprus",         None,              "CYP", date(2008, 1, 1)),
-    Country("MT", "Malta",           "malta",          None,              "MTL", date(2008, 1, 1)),
-    Country("HR", "Croatia",         "croatia",        None,              "HRK", date(2023, 1, 1)),
+    Country("NL", "NLD", "Netherlands",     "netherlands",    True,  "NLG", date(1999, 1, 1)),
+    Country("BE", "BEL", "Belgium",         "belgium",        True,  "BEF", date(1999, 1, 1)),
+    Country("AT", "AUT", "Austria",         "austria",        True,  "ATS", date(1999, 1, 1)),
+    Country("PT", "PRT", "Portugal",        "portugal",       True,  "PTE", date(1999, 1, 1)),
+    Country("IE", "IRL", "Ireland",         "ireland",        True,  "IEP", date(1999, 1, 1)),
+    Country("GR", "GRC", "Greece",          "greece",         True,  "GRD", date(2001, 1, 1)),
+    Country("LU", "LUX", "Luxembourg",      "luxembourg",     True,  "LUF", date(1999, 1, 1)),
+    Country("SI", "SVN", "Slovenia",        "slovenia",       True,  "SIT", date(2007, 1, 1)),
+    Country("SK", "SVK", "Slovakia",        "slovakia",       True,  "SKK", date(2009, 1, 1)),
+    Country("EE", "EST", "Estonia",         "estonia",        False, "EEK", date(2011, 1, 1)),
+    Country("LV", "LVA", "Latvia",          "latvia",         False, "LVL", date(2014, 1, 1)),
+    Country("LT", "LTU", "Lithuania",       "lithuania",      False, "LTL", date(2015, 1, 1)),
+    Country("CY", "CYP", "Cyprus",          "cyprus",         False, "CYP", date(2008, 1, 1)),
+    Country("MT", "MLT", "Malta",           "malta",          False, "MTL", date(2008, 1, 1)),
+    Country("HR", "HRV", "Croatia",         "croatia",        False, "HRK", date(2023, 1, 1)),
 
     # Other advanced
-    Country("CZ", "Czechia",         "czech-republic", "IRLTLT01CZM156N", "CZK"),
-    Country("IL", "Israel",          "israel",         "IRLTLT01ILM156N", "ILS"),
-    Country("NZ", "New Zealand",     "new-zealand",    "IRLTLT01NZM156N", "NZD"),
-    Country("BG", "Bulgaria",        "bulgaria",       None,              "BGN"),
-    Country("SG", "Singapore",       "singapore",      None,              "SGD"),
-    Country("HK", "Hong Kong",       "hong-kong",      None,              "HKD"),
-    Country("TW", "Taiwan",          "taiwan",         None,              "TWD"),
+    Country("CZ", "CZE", "Czechia",         "czech-republic", True,  "CZK"),
+    Country("IL", "ISR", "Israel",          "israel",         True,  "ILS"),
+    Country("NZ", "NZL", "New Zealand",     "new-zealand",    True,  "NZD"),
+    Country("BG", "BGR", "Bulgaria",        "bulgaria",       False, "BGN"),
+    Country("SG", "SGP", "Singapore",       "singapore",      False, "SGD"),
+    Country("HK", "HKG", "Hong Kong",       "hong-kong",      False, "HKD"),
+    Country("TW", "TWN", "Taiwan",          "taiwan",         False, "TWD"),
 
     # Micro-states intentionally omitted: AD (Andorra), LI (Liechtenstein),
     # SM (San Marino), MO (Macau), PR (Puerto Rico) — no meaningful sovereign

@@ -30,7 +30,9 @@ There is no backend. The entire dataset is a single static `dataset.json` (a few
 ## Data sources
 
 - **Rating actions**: scraped from `countryeconomy.com/ratings/<country>`. Long-term foreign-currency ratings only. All three agencies. Includes outlook-only changes.
-- **Yields**: FRED series `IRLTLT01{ISO2}M156N` — OECD harmonised long-term (≈10y) government bond yields, monthly. 30 of the 38 in-scope countries have FRED data; the rest (small Eurozone, Asian advanced) currently have no yield series and show as "no data" in the detail panel.
+- **Yields**: DBNomics mirror of OECD MEI (`OECD/MEI/{ISO3}.IRLTLT01.ST.M`) — harmonised long-term (≈10y) government bond yields, monthly. Free, no API key. 28 of the 38 in-scope countries have a series; the rest (small Eurozone, BG, SG, HK, TW) show "no data" in the detail panel. We previously used FRED's CSV endpoint but it became unreliable in mid-2026 — see commit history.
+
+⚠ **Coverage caveat**: the OECD MEI database was restructured in 2024, and the DBNomics mirror currently ends in early 2024. Events from 2024 onwards (e.g. Moody's downgrade of US in May 2025) will be missing the forward half of their ±12mo window. The "before" half is unaffected. We'll move to a fresher source once one's available without a paid feed.
 
 ## Running locally
 
