@@ -41,7 +41,7 @@ function ToggleSet({ options, selected, onToggle, mode = 'multi' }) {
   );
 }
 
-export default function Filters({ filters, setFilters, totalCount, matchedCount }) {
+export default function Filters({ filters, setFilters }) {
   const toggleAgency = (a) => setFilters(f => ({
     ...f,
     agencies: f.agencies.includes(a) ? f.agencies.filter(x => x !== a) : [...f.agencies, a],
@@ -77,8 +77,6 @@ export default function Filters({ filters, setFilters, totalCount, matchedCount 
           onToggle={id => setFilters(f => ({ ...f, currency: id }))}
         />
       </div>
-
-      <div className="summary">{matchedCount} / {totalCount} events</div>
     </div>
   );
 }

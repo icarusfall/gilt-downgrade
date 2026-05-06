@@ -7,7 +7,7 @@
 
 .main {
   flex: 1;
-  padding: 16px 24px;
+  padding: 18px 24px;
   max-width: 1600px;
   width: 100%;
   margin: 0 auto;
@@ -16,26 +16,28 @@
 .view {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 /* Nav */
 .nav {
   display: flex;
   align-items: center;
-  gap: 32px;
+  gap: 24px;
   padding: 0 24px;
-  height: 52px;
+  height: 56px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
 }
 
 .nav-brand {
   font-weight: 600;
-  font-size: 15px;
-  color: var(--accent);
-  letter-spacing: -0.3px;
+  font-size: 16px;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
 }
+
+.nav-brand .accent { color: var(--accent); }
 
 .nav-meta {
   margin-left: auto;
@@ -47,13 +49,14 @@
 /* Filters */
 .filters {
   display: flex;
-  gap: 24px;
+  gap: 22px;
   padding: 12px 16px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 8px;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: flex-end;
+  box-shadow: var(--shadow);
 }
 
 .filter-group {
@@ -77,7 +80,7 @@
 }
 
 .toggle-btn {
-  background: var(--bg-surface);
+  background: var(--bg-secondary);
   color: var(--text-secondary);
   border: 1px solid var(--border);
   padding: 4px 10px;
@@ -86,29 +89,76 @@
   font-family: inherit;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.12s;
 }
 
 .toggle-btn:hover {
-  border-color: var(--text-muted);
+  border-color: var(--border-strong);
   color: var(--text-primary);
+  background: var(--bg-surface);
 }
 
 .toggle-btn.active {
-  background: rgba(79, 195, 247, 0.12);
+  background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent);
 }
 
-.summary {
-  margin-left: auto;
-  color: var(--text-secondary);
-  font-size: 12px;
+/* Stats strip */
+.stats {
+  display: flex;
+  gap: 14px;
+  padding: 0;
+  flex-wrap: wrap;
+}
+
+.stat {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 130px;
+  box-shadow: var(--shadow);
+}
+
+.stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.stat-value {
   font-family: 'JetBrains Mono', monospace;
-  align-self: center;
+  font-size: 18px;
+  color: var(--text-primary);
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.stat-value.up    { color: var(--success); }
+.stat-value.down  { color: var(--danger); }
+
+.stat-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
 }
 
 /* Event table */
+.events-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow);
+  max-height: calc(100vh - 280px);
+  overflow: auto;
+}
+
 .events-table {
   width: 100%;
   border-collapse: collapse;
@@ -127,12 +177,7 @@
   background: var(--bg-secondary);
   position: sticky;
   top: 0;
-  cursor: pointer;
   user-select: none;
-}
-
-.events-table th:hover {
-  color: var(--text-primary);
 }
 
 .events-table td {
@@ -143,7 +188,7 @@
 
 .events-table tr.event-row {
   cursor: pointer;
-  transition: background 0.1s;
+  transition: background 0.08s;
 }
 
 .events-table tr.event-row:hover {
@@ -151,7 +196,11 @@
 }
 
 .events-table tr.event-row.selected {
-  background: rgba(79, 195, 247, 0.08);
+  background: var(--accent-soft);
+}
+
+.events-table tr:last-child td {
+  border-bottom: none;
 }
 
 /* Badges */
@@ -166,14 +215,14 @@
 }
 
 .badge-down {
-  background: rgba(239, 83, 80, 0.12);
-  border-color: rgba(239, 83, 80, 0.35);
+  background: var(--danger-soft);
+  border-color: rgba(185, 28, 28, 0.25);
   color: var(--danger);
 }
 
 .badge-up {
-  background: rgba(102, 187, 106, 0.12);
-  border-color: rgba(102, 187, 106, 0.35);
+  background: var(--success-soft);
+  border-color: rgba(21, 128, 61, 0.25);
   color: var(--success);
 }
 
@@ -187,12 +236,14 @@
   font-size: 11px;
   color: var(--text-secondary);
   border-color: var(--border);
+  background: var(--bg-secondary);
 }
 
 .badge-currency {
   font-size: 11px;
   color: var(--text-muted);
   border-color: var(--border);
+  background: var(--bg-secondary);
 }
 
 .rating-arrow {
@@ -207,13 +258,14 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 16px;
+  box-shadow: var(--shadow);
 }
 
 .detail-header {
   display: flex;
   align-items: baseline;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .detail-title {

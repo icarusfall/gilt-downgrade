@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import Plot from '../lib/Plot';
 import Filters from '../components/Filters';
-import { loadDataset, PLOT_LAYOUT_DEFAULTS, AGENCY_COLOR, eventDirection } from '../lib/dataset';
+import {
+  loadDataset, PLOT_LAYOUT_DEFAULTS, AGENCY_COLOR,
+  eventDirection, computeStats, fmtBps,
+} from '../lib/dataset';
 
 const DEFAULT_FILTERS = {
   agencies: ["Moody's", "S&P", "Fitch"],
@@ -49,6 +52,33 @@ function notchBadge(ev) {
   return <span className={`badge ${cls}`}>{sign}{ev.notches}</span>;
 }
 
+function StatsStrip({ stats, totalCount, matchedCount }) {
+  const moveClass = stats.move_mean > 0 ? 'up' : stats.move_mean < 0 ? 'down' : '';
+  return (
+    <div className="stats">
+      <div className="stat">
+        <span className="stat-label">Events</span>
+        <span className="stat-value">{matchedCount}</span>
+        <span className="stat-note">of {totalCount} ({stats.n} with yields)</span>
+      </div>
+      <div className="stat">
+        <span className="stat-label">Net 12mo yield move</span>
+        <span className={`stat-value ${moveClass}`}>
+          {fmtBps(stats.move_mean)} <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 400 }}>± {fmtBps(stats.move_std)}</span>
+        </span>
+        <span className="stat-note">bps, post-event avg − pre</span>
+      </div>
+      <div className="stat">
+        <span className="stat-label">Window range</span>
+        <span className="stat-value">
+          {fmtBps(stats.range_mean)} <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 400 }}>± {fmtBps(stats.range_std)}</span>
+        </span>
+        <span className="stat-note">bps, max − min in ±12mo</span>
+      </div>
+    </div>
+  );
+}
+
 export default function Events() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -71,25 +101,30 @@ export default function Events() {
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [data, filters]);
 
-  const selected = filtered.find(e => e.id === selectedId) || filtered[0] || null;
+  const stats = useMemo(() => computeStats(filtered), [filtered]);
+  // Default selection = most recent event that actually has a yield window,
+  // so the chart isn't empty when you land on the page.
+  const firstWithYields = filtered.find(e => e.yields && e.yields.length > 0);
+  const selected = filtered.find(e => e.id === selectedId) || firstWithYields || filtered[0] || null;
 
   if (error) return <div className="error">Failed to load dataset: {error}</div>;
   if (!data)  return <div className="loading">Loading dataset…</div>;
 
   return (
     <div className="view">
-      <Filters
-        filters={filters}
-        setFilters={setFilters}
+      <Filters filters={filters} setFilters={setFilters} />
+      <StatsStrip
+        stats={stats}
         totalCount={data.events.length}
         matchedCount={filtered.length}
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.3fr)', gap: 16 }}>
-        <div style={{ maxHeight: 'calc(100vh - 220px)', overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+        <div className="events-panel">
           <table className="events-table">
             <thead>
               <tr>
+                <th title="Yield data available?" style={{ width: 18 }}></th>
                 <th>Date</th>
                 <th>Country</th>
                 <th>Agency</th>
@@ -102,12 +137,20 @@ export default function Events() {
               {filtered.slice(0, 500).map(ev => {
                 const country = countryByIso[ev.country_iso2];
                 const isSel = selected && selected.id === ev.id;
+                const hasY = ev.yields && ev.yields.length > 0;
                 return (
                   <tr
                     key={ev.id}
                     className={`event-row ${isSel ? 'selected' : ''}`}
                     onClick={() => setSelectedId(ev.id)}
                   >
+                    <td style={{ textAlign: 'center', padding: '8px 4px' }} title={hasY ? `${ev.yields.length} monthly points` : 'no yield data in window'}>
+                      <span style={{
+                        display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
+                        background: hasY ? 'var(--success)' : 'transparent',
+                        border: hasY ? 'none' : '1px solid var(--border-strong)',
+                      }} />
+                    </td>
                     <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12 }}>{ev.date}</td>
                     <td>{country?.name || ev.country_iso2}</td>
                     <td><span className="badge badge-agency">{ev.agency}</span></td>
@@ -120,12 +163,12 @@ export default function Events() {
                 );
               })}
               {filtered.length > 500 && (
-                <tr><td colSpan="6" style={{ padding: 12, color: 'var(--text-muted)', fontSize: 12 }}>
+                <tr><td colSpan="7" style={{ padding: 12, color: 'var(--text-muted)', fontSize: 12 }}>
                   Showing first 500 of {filtered.length} matching events. Tighten filters to narrow.
                 </td></tr>
               )}
               {filtered.length === 0 && (
-                <tr><td colSpan="6" style={{ padding: 24, color: 'var(--text-muted)', textAlign: 'center' }}>
+                <tr><td colSpan="7" style={{ padding: 24, color: 'var(--text-muted)', textAlign: 'center' }}>
                   No events match these filters.
                 </td></tr>
               )}
@@ -148,7 +191,7 @@ function EventDetail({ event, country }) {
     y: event.yields.map(p => p.y),
     type: 'scatter',
     mode: 'lines+markers',
-    line: { color: AGENCY_COLOR[event.agency] || '#4fc3f7', width: 2 },
+    line: { color: AGENCY_COLOR[event.agency] || '#1d4ed8', width: 2 },
     marker: { size: 4 },
     name: '10y yield',
     hovertemplate: '%{x|%Y-%m-%d}<br>%{y:.2f}%<extra></extra>',
@@ -161,12 +204,12 @@ function EventDetail({ event, country }) {
       type: 'line',
       x0: event.date, x1: event.date,
       yref: 'paper', y0: 0, y1: 1,
-      line: { color: '#ef5350', width: 1.5, dash: 'dash' },
+      line: { color: '#b91c1c', width: 1.5, dash: 'dash' },
     }],
     annotations: [{
       x: event.date, yref: 'paper', y: 1.02,
       text: 'rating action', showarrow: false,
-      font: { size: 10, color: '#ef5350' },
+      font: { size: 10, color: '#b91c1c' },
     }],
   };
 
