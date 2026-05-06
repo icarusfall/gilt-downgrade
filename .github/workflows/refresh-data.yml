@@ -1,0 +1,45 @@
+name: Refresh dataset
+
+on:
+  schedule:
+    # Monthly: 06:00 UTC on the 5th. FRED publishes month-end data with a few
+    # days' lag, so the 5th gives us the previous month's full data.
+    - cron: '0 6 5 * *'
+  workflow_dispatch: {}   # allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python deps
+        run: pip install requests==2.32.3
+
+      - name: Fetch ratings
+        run: python scripts/fetch_ratings.py
+
+      - name: Fetch yields
+        run: python scripts/fetch_yields.py
+
+      - name: Build dataset
+        run: python scripts/build_dataset.py
+
+      - name: Commit dataset if changed
+        run: |
+          git config user.name  "gilt-downgrade-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add frontend/public/data/dataset.json
+          if git diff --cached --quiet; then
+            echo "No dataset changes."
+          else
+            git commit -m "data: monthly refresh ($(date -u +%Y-%m-%d))"
+            git push
+          fi

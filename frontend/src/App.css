@@ -1,0 +1,243 @@
+/* Layout */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.main {
+  flex: 1;
+  padding: 16px 24px;
+  max-width: 1600px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Nav */
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  padding: 0 24px;
+  height: 52px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav-brand {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--accent);
+  letter-spacing: -0.3px;
+}
+
+.nav-meta {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Filters */
+.filters {
+  display: flex;
+  gap: 24px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filter-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.toggle-group {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.toggle-btn {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.toggle-btn:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.toggle-btn.active {
+  background: rgba(79, 195, 247, 0.12);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.summary {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  align-self: center;
+}
+
+/* Event table */
+.events-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.events-table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  position: sticky;
+  top: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.events-table th:hover {
+  color: var(--text-primary);
+}
+
+.events-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.events-table tr.event-row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.events-table tr.event-row:hover {
+  background: var(--bg-surface);
+}
+
+.events-table tr.event-row.selected {
+  background: rgba(79, 195, 247, 0.08);
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.badge-down {
+  background: rgba(239, 83, 80, 0.12);
+  border-color: rgba(239, 83, 80, 0.35);
+  color: var(--danger);
+}
+
+.badge-up {
+  background: rgba(102, 187, 106, 0.12);
+  border-color: rgba(102, 187, 106, 0.35);
+  color: var(--success);
+}
+
+.badge-flat {
+  background: var(--bg-surface);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.badge-agency {
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+.badge-currency {
+  font-size: 11px;
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.rating-arrow {
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+
+/* Detail panel */
+.detail-panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.detail-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.detail-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.detail-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.detail-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Loading / error */
+.loading, .error {
+  padding: 48px;
+  text-align: center;
+  color: var(--text-secondary);
+}
