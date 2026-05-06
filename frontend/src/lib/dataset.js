@@ -52,23 +52,42 @@ const stdev = (xs) => {
   return Math.sqrt(xs.reduce((s, x) => s + (x - m) ** 2, 0) / (xs.length - 1));
 };
 
-/**
- * Per-event "net 12mo yield move" = mean(post-event yields) − mean(pre-event
- * yields), in bps. Returns null if the window is too sparse (<3 pre, <3 post)
- * to be informative.
- */
-export function eventMove(ev) {
-  if (!ev.yields || ev.yields.length < 6) return null;
+// Minimum number of monthly yield points required *after* the event for a
+// post-window to be useful. 6 months is enough to show whether the market
+// reacted; less than that often means the yield series ends shortly after
+// the event and a reading would be misleading.
+const MIN_POST_POINTS = 6;
+const MIN_PRE_POINTS  = 3;
+
+/** Split a yield window into (pre, post) arrays around the event date. */
+function splitWindow(ev) {
   const pre = [], post = [];
+  if (!ev.yields) return { pre, post };
   for (const p of ev.yields) {
     if (p.date <= ev.date) pre.push(p.y); else post.push(p.y);
   }
-  if (pre.length < 3 || post.length < 3) return null;
+  return { pre, post };
+}
+
+/** True iff the event has enough surrounding yield data to be analysable. */
+export function hasUsefulYields(ev) {
+  const { pre, post } = splitWindow(ev);
+  return pre.length >= MIN_PRE_POINTS && post.length >= MIN_POST_POINTS;
+}
+
+/**
+ * Per-event "net 12mo yield move" = mean(post-event yields) − mean(pre-event
+ * yields), in bps. Returns null if the window doesn't meet the minimum
+ * pre/post point thresholds.
+ */
+export function eventMove(ev) {
+  const { pre, post } = splitWindow(ev);
+  if (pre.length < MIN_PRE_POINTS || post.length < MIN_POST_POINTS) return null;
   return (mean(post) - mean(pre)) * 100;
 }
 
 export function eventRange(ev) {
-  if (!ev.yields || !ev.yields.length) return null;
+  if (!hasUsefulYields(ev)) return null;
   const ys = ev.yields.map(p => p.y);
   return (Math.max(...ys) - Math.min(...ys)) * 100;
 }

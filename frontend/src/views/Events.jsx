@@ -3,7 +3,7 @@ import Plot from '../lib/Plot';
 import Filters from '../components/Filters';
 import {
   loadDataset, PLOT_LAYOUT_DEFAULTS, AGENCY_COLOR,
-  eventDirection, computeStats, eventMove, fmtBps,
+  eventDirection, computeStats, eventMove, hasUsefulYields, fmtBps,
 } from '../lib/dataset';
 
 const DEFAULT_FILTERS = {
@@ -39,7 +39,7 @@ function matchesNonCurrency(ev, f) {
     if (ev.notches == null || Math.abs(ev.notches) < 2) return false;
   }
 
-  if (f.yields === 'only' && (!ev.yields || ev.yields.length === 0)) return false;
+  if (f.yields === 'only' && !hasUsefulYields(ev)) return false;
 
   return true;
 }
@@ -212,10 +212,10 @@ export default function Events() {
     excludedCurrencies: ['USD', 'EUR'],
     keepDeFromEur: true,
   }));
-  // Default selection = most recent event that actually has a yield window,
-  // so the chart isn't empty when you land on the page.
-  const firstWithYields = filtered.find(e => e.yields && e.yields.length > 0);
-  const selected = filtered.find(e => e.id === selectedId) || firstWithYields || filtered[0] || null;
+  // Default selection = most recent event with enough surrounding yield data
+  // to be analysable, so the chart isn't empty when you land on the page.
+  const firstUseful = filtered.find(hasUsefulYields);
+  const selected = filtered.find(e => e.id === selectedId) || firstUseful || filtered[0] || null;
 
   if (error) return <div className="error">Failed to load dataset: {error}</div>;
   if (!data)  return <div className="loading">Loading dataset…</div>;
@@ -253,7 +253,7 @@ export default function Events() {
               {filtered.slice(0, 500).map(ev => {
                 const country = countryByIso[ev.country_iso2];
                 const isSel = selected && selected.id === ev.id;
-                const hasY = ev.yields && ev.yields.length > 0;
+                const hasY = hasUsefulYields(ev);
                 const move = eventMove(ev);
                 const moveCls = move == null ? '' : move > 0 ? 'move-up' : move < 0 ? 'move-down' : '';
                 return (
@@ -262,7 +262,7 @@ export default function Events() {
                     className={`event-row ${isSel ? 'selected' : ''} ${hasY ? '' : 'no-yields'}`}
                     onClick={() => setSelectedId(ev.id)}
                   >
-                    <td style={{ textAlign: 'center', padding: '8px 4px' }} title={hasY ? `${ev.yields.length} monthly points` : 'no yield data in window'}>
+                    <td style={{ textAlign: 'center', padding: '8px 4px' }} title={hasY ? `${ev.yields.length} monthly points (≥6 post-event)` : 'insufficient post-event yield data'}>
                       <span style={{
                         display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
                         background: hasY ? 'var(--success)' : 'transparent',
