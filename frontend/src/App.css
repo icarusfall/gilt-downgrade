@@ -199,6 +199,20 @@
   background: var(--accent-soft);
 }
 
+.events-table tr.event-row.no-yields {
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+.events-table tr.event-row.no-yields .badge,
+.events-table tr.event-row.no-yields .rating-arrow {
+  opacity: 0.85;
+}
+
+.events-table tr.event-row.no-yields:hover {
+  opacity: 0.85;
+}
+
 .events-table tr:last-child td {
   border-bottom: none;
 }

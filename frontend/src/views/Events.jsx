@@ -94,6 +94,21 @@ export default function Events() {
     return Object.fromEntries(data.countries.map(c => [c.iso2, c]));
   }, [data]);
 
+  // Per-country max yield date — used to tell users "your event is past
+  // our data cutoff" vs "this country has no series at all".
+  const lastYieldByCountry = useMemo(() => {
+    if (!data) return {};
+    const out = {};
+    for (const ev of data.events) {
+      if (!ev.yields || !ev.yields.length) continue;
+      const last = ev.yields[ev.yields.length - 1].date;
+      if (!out[ev.country_iso2] || last > out[ev.country_iso2]) {
+        out[ev.country_iso2] = last;
+      }
+    }
+    return out;
+  }, [data]);
+
   const filtered = useMemo(() => {
     if (!data) return [];
     return data.events
@@ -141,7 +156,7 @@ export default function Events() {
                 return (
                   <tr
                     key={ev.id}
-                    className={`event-row ${isSel ? 'selected' : ''}`}
+                    className={`event-row ${isSel ? 'selected' : ''} ${hasY ? '' : 'no-yields'}`}
                     onClick={() => setSelectedId(ev.id)}
                   >
                     <td style={{ textAlign: 'center', padding: '8px 4px' }} title={hasY ? `${ev.yields.length} monthly points` : 'no yield data in window'}>
@@ -176,13 +191,30 @@ export default function Events() {
           </table>
         </div>
 
-        <EventDetail event={selected} country={selected ? countryByIso[selected.country_iso2] : null} />
+        <EventDetail
+          event={selected}
+          country={selected ? countryByIso[selected.country_iso2] : null}
+          lastYieldDate={selected ? lastYieldByCountry[selected.country_iso2] : null}
+        />
       </div>
     </div>
   );
 }
 
-function EventDetail({ event, country }) {
+function emptyReason(event, country, lastYieldDate) {
+  if (!country?.has_yields) {
+    return `${country?.name || event.country_iso2} has no harmonised 10y yield series in our data source.`;
+  }
+  if (lastYieldDate && event.date > lastYieldDate) {
+    return `Yield data for ${country.name} ends ${lastYieldDate.slice(0, 7)}; this event is past the source cutoff (OECD MEI, currently early 2024).`;
+  }
+  if (lastYieldDate && event.yields.length === 0) {
+    return `No yield data overlaps the ±12mo window around ${event.date} (data starts later than that).`;
+  }
+  return `No yield data available for ${country?.name || event.country_iso2} in this window.`;
+}
+
+function EventDetail({ event, country, lastYieldDate }) {
   if (!event) {
     return <div className="detail-panel detail-empty">Select an event to view its yield window.</div>;
   }
@@ -226,7 +258,7 @@ function EventDetail({ event, country }) {
         {' · '}{event.currency_at_event}
       </div>
       {traces.length === 0
-        ? <div className="detail-empty">No yield data available for {country?.name || event.country_iso2} in this window.</div>
+        ? <div className="detail-empty">{emptyReason(event, country, lastYieldDate)}</div>
         : <Plot
             data={traces}
             layout={layout}
