@@ -13,14 +13,6 @@ const MAGNITUDES = [
   { id: 'outlook', label: 'Outlook only' },
 ];
 
-const CURRENCIES = [
-  { id: 'all',            label: 'All' },
-  { id: 'no_usd',         label: 'Excl. USD' },
-  { id: 'no_eur',         label: 'Excl. EUR' },
-  { id: 'no_eur_keep_de', label: 'Excl. EUR (keep DE)' },
-  { id: 'no_both',        label: 'Excl. USD & EUR' },
-];
-
 const YIELDS = [
   { id: 'any',  label: 'All' },
   { id: 'only', label: 'With chart' },
@@ -73,14 +65,6 @@ export default function Filters({ filters, setFilters }) {
         <ToggleSet
           options={MAGNITUDES} selected={filters.magnitude} mode="single"
           onToggle={id => setFilters(f => ({ ...f, magnitude: id }))}
-        />
-      </div>
-
-      <div className="filter-group">
-        <span className="filter-label">Currency</span>
-        <ToggleSet
-          options={CURRENCIES} selected={filters.currency} mode="single"
-          onToggle={id => setFilters(f => ({ ...f, currency: id }))}
         />
       </div>
 

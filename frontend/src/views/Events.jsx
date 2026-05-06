@@ -3,18 +3,27 @@ import Plot from '../lib/Plot';
 import Filters from '../components/Filters';
 import {
   loadDataset, PLOT_LAYOUT_DEFAULTS, AGENCY_COLOR,
-  eventDirection, computeStats, fmtBps,
+  eventDirection, computeStats, eventMove, fmtBps,
 } from '../lib/dataset';
 
 const DEFAULT_FILTERS = {
   agencies: ["Moody's", "S&P", "Fitch"],
   direction: 'all',
   magnitude: 'any',
-  currency: 'all',
+  excludedCurrencies: [],   // toggled by clicking chips
+  keepDeFromEur: false,     // GBP-comparator escape hatch: exclude EUR but keep DE
   yields: 'any',
 };
 
-function matchesFilters(ev, f) {
+// Returns true iff the event's currency is currently being filtered out.
+function isCurrencyExcluded(ev, f) {
+  const ccy = ev.currency_at_event;
+  if (!f.excludedCurrencies.includes(ccy)) return false;
+  if (ccy === 'EUR' && f.keepDeFromEur && ev.country_iso2 === 'DE') return false;
+  return true;
+}
+
+function matchesNonCurrency(ev, f) {
   if (!f.agencies.includes(ev.agency)) return false;
 
   const dir = eventDirection(ev.notches);
@@ -30,16 +39,13 @@ function matchesFilters(ev, f) {
     if (ev.notches == null || Math.abs(ev.notches) < 2) return false;
   }
 
-  const ccy = ev.currency_at_event;
-  const iso = ev.country_iso2;
-  if (f.currency === 'no_usd' && ccy === 'USD') return false;
-  if (f.currency === 'no_eur' && ccy === 'EUR') return false;
-  if (f.currency === 'no_eur_keep_de' && ccy === 'EUR' && iso !== 'DE') return false;
-  if (f.currency === 'no_both' && (ccy === 'USD' || ccy === 'EUR')) return false;
-
   if (f.yields === 'only' && (!ev.yields || ev.yields.length === 0)) return false;
 
   return true;
+}
+
+function matchesFilters(ev, f) {
+  return matchesNonCurrency(ev, f) && !isCurrencyExcluded(ev, f);
 }
 
 function formatRating(r) { return r ?? '—'; }
@@ -57,7 +63,23 @@ function notchBadge(ev) {
   return <span className={`badge ${cls}`}>{sign}{ev.notches}</span>;
 }
 
-function StatsStrip({ stats, totalCount, matchedCount, currencyCounts }) {
+function chipTooltip(stat) {
+  const { ccy, n, n_with_move, move_mean, countries } = stat;
+  const lines = [];
+  lines.push(`${ccy} · ${n} event${n === 1 ? '' : 's'}`);
+  if (n_with_move > 0) {
+    lines.push(`avg net 12mo move: ${fmtBps(move_mean)} bps  (n=${n_with_move})`);
+  } else {
+    lines.push('no events with usable yield window');
+  }
+  if (countries.length) {
+    lines.push('');
+    lines.push(countries.map(([name, k]) => `${name} (${k})`).join(', '));
+  }
+  return lines.join('\n');
+}
+
+function StatsStrip({ stats, totalCount, matchedCount, currencyStats, excluded, onToggleCcy, onResetCcy, onGbpComparator }) {
   const moveClass = stats.move_mean > 0 ? 'up' : stats.move_mean < 0 ? 'down' : '';
   return (
     <div className="stats">
@@ -80,16 +102,31 @@ function StatsStrip({ stats, totalCount, matchedCount, currencyCounts }) {
         </span>
         <span className="stat-note">bps, max − min in ±12mo</span>
       </div>
-      <div className="stat" style={{ flex: 1, minWidth: 220 }}>
-        <span className="stat-label">Currencies in set</span>
+      <div className="stat" style={{ flex: 1, minWidth: 260 }}>
+        <div className="ccy-header">
+          <span className="stat-label">Currencies in set</span>
+          <div className="ccy-actions">
+            <button className="ccy-action" onClick={onResetCcy} title="Include every currency">All</button>
+            <button className="ccy-action" onClick={onGbpComparator} title="Exclude USD and EUR (but keep Germany — the EUR benchmark)">GBP comparator</button>
+          </div>
+        </div>
         <div className="ccy-chips">
-          {currencyCounts.length === 0
+          {currencyStats.length === 0
             ? <span className="stat-note" style={{ paddingTop: 2 }}>—</span>
-            : currencyCounts.map(([ccy, n]) => (
-                <span key={ccy} className="ccy-chip">
-                  {ccy}<span className="ccy-chip-n">{n}</span>
-                </span>
-              ))}
+            : currencyStats.map(s => {
+                const isExcl = excluded.includes(s.ccy);
+                return (
+                  <button
+                    key={s.ccy}
+                    type="button"
+                    className={`ccy-chip ${isExcl ? 'excluded' : ''}`}
+                    title={chipTooltip(s)}
+                    onClick={() => onToggleCcy(s.ccy)}
+                  >
+                    {s.ccy}<span className="ccy-chip-n">{s.n}</span>
+                  </button>
+                );
+              })}
         </div>
       </div>
     </div>
@@ -135,13 +172,46 @@ export default function Events() {
 
   const stats = useMemo(() => computeStats(filtered), [filtered]);
 
-  const currencyCounts = useMemo(() => {
-    const m = new Map();
-    for (const ev of filtered) {
-      m.set(ev.currency_at_event, (m.get(ev.currency_at_event) || 0) + 1);
+  // Currency chips show all currencies that would be present if the user
+  // hadn't applied any currency exclusions, so excluded chips remain visible
+  // and can be re-enabled with one click.
+  const currencyStats = useMemo(() => {
+    if (!data) return [];
+    const candidates = data.events.filter(ev => matchesNonCurrency(ev, filters));
+    const grouped = new Map();   // ccy -> { events: [], countries: Map<iso2, count> }
+    for (const ev of candidates) {
+      const c = ev.currency_at_event;
+      if (!grouped.has(c)) grouped.set(c, { events: [], countries: new Map() });
+      const g = grouped.get(c);
+      g.events.push(ev);
+      g.countries.set(ev.country_iso2, (g.countries.get(ev.country_iso2) || 0) + 1);
     }
-    return [...m.entries()].sort((a, b) => b[1] - a[1]);
-  }, [filtered]);
+    const out = [];
+    for (const [ccy, g] of grouped) {
+      const moves = g.events.map(eventMove).filter(x => x != null);
+      const avg = moves.length ? moves.reduce((a, b) => a + b, 0) / moves.length : NaN;
+      const countries = [...g.countries.entries()]
+        .map(([iso, n]) => [countryByIso[iso]?.name || iso, n])
+        .sort((a, b) => b[1] - a[1]);
+      out.push({ ccy, n: g.events.length, n_with_move: moves.length, move_mean: avg, countries });
+    }
+    return out.sort((a, b) => b.n - a.n);
+  }, [data, filters, countryByIso]);
+
+  const toggleCcy = (ccy) => setFilters(f => ({
+    ...f,
+    excludedCurrencies: f.excludedCurrencies.includes(ccy)
+      ? f.excludedCurrencies.filter(x => x !== ccy)
+      : [...f.excludedCurrencies, ccy],
+    keepDeFromEur: ccy === 'EUR' ? false : f.keepDeFromEur,
+  }));
+
+  const resetCcy = () => setFilters(f => ({ ...f, excludedCurrencies: [], keepDeFromEur: false }));
+  const gbpComparator = () => setFilters(f => ({
+    ...f,
+    excludedCurrencies: ['USD', 'EUR'],
+    keepDeFromEur: true,
+  }));
   // Default selection = most recent event that actually has a yield window,
   // so the chart isn't empty when you land on the page.
   const firstWithYields = filtered.find(e => e.yields && e.yields.length > 0);
@@ -157,7 +227,11 @@ export default function Events() {
         stats={stats}
         totalCount={data.events.length}
         matchedCount={filtered.length}
-        currencyCounts={currencyCounts}
+        currencyStats={currencyStats}
+        excluded={filters.excludedCurrencies}
+        onToggleCcy={toggleCcy}
+        onResetCcy={resetCcy}
+        onGbpComparator={gbpComparator}
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.3fr)', gap: 16 }}>
@@ -172,6 +246,7 @@ export default function Events() {
                 <th>Change</th>
                 <th>Δ</th>
                 <th>Ccy</th>
+                <th title="Net 12mo yield move: post-event mean − pre-event mean, in bps" style={{ textAlign: 'right' }}>Move (bps)</th>
               </tr>
             </thead>
             <tbody>
@@ -179,6 +254,8 @@ export default function Events() {
                 const country = countryByIso[ev.country_iso2];
                 const isSel = selected && selected.id === ev.id;
                 const hasY = ev.yields && ev.yields.length > 0;
+                const move = eventMove(ev);
+                const moveCls = move == null ? '' : move > 0 ? 'move-up' : move < 0 ? 'move-down' : '';
                 return (
                   <tr
                     key={ev.id}
@@ -200,16 +277,17 @@ export default function Events() {
                     </td>
                     <td>{notchBadge(ev)}</td>
                     <td><span className="badge badge-currency">{ev.currency_at_event}</span></td>
+                    <td className={`move-cell ${moveCls}`}>{move == null ? '—' : fmtBps(move)}</td>
                   </tr>
                 );
               })}
               {filtered.length > 500 && (
-                <tr><td colSpan="7" style={{ padding: 12, color: 'var(--text-muted)', fontSize: 12 }}>
+                <tr><td colSpan="8" style={{ padding: 12, color: 'var(--text-muted)', fontSize: 12 }}>
                   Showing first 500 of {filtered.length} matching events. Tighten filters to narrow.
                 </td></tr>
               )}
               {filtered.length === 0 && (
-                <tr><td colSpan="7" style={{ padding: 24, color: 'var(--text-muted)', textAlign: 'center' }}>
+                <tr><td colSpan="8" style={{ padding: 24, color: 'var(--text-muted)', textAlign: 'center' }}>
                   No events match these filters.
                 </td></tr>
               )}

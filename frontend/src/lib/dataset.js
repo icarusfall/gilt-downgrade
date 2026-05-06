@@ -43,39 +43,49 @@ export function eventDirection(notches) {
   return 'flat';
 }
 
-// ---- summary stats over a filtered event set ----------------------------
+// ---- per-event and aggregate yield-response stats -----------------------
 
-function mean(xs) { return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN; }
-function stdev(xs) {
+const mean = (xs) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN;
+const stdev = (xs) => {
   if (xs.length < 2) return NaN;
   const m = mean(xs);
   return Math.sqrt(xs.reduce((s, x) => s + (x - m) ** 2, 0) / (xs.length - 1));
+};
+
+/**
+ * Per-event "net 12mo yield move" = mean(post-event yields) − mean(pre-event
+ * yields), in bps. Returns null if the window is too sparse (<3 pre, <3 post)
+ * to be informative.
+ */
+export function eventMove(ev) {
+  if (!ev.yields || ev.yields.length < 6) return null;
+  const pre = [], post = [];
+  for (const p of ev.yields) {
+    if (p.date <= ev.date) pre.push(p.y); else post.push(p.y);
+  }
+  if (pre.length < 3 || post.length < 3) return null;
+  return (mean(post) - mean(pre)) * 100;
+}
+
+export function eventRange(ev) {
+  if (!ev.yields || !ev.yields.length) return null;
+  const ys = ev.yields.map(p => p.y);
+  return (Math.max(...ys) - Math.min(...ys)) * 100;
 }
 
 /**
- * For each event with yield data, compute:
- *  - net move = mean(yields after action) − mean(yields before/at action), in bps
- *  - range = max(window yields) − min(window yields), in bps (always >= 0)
- * Aggregate mean and stdev across the filtered set.
- *
- * Events with fewer than 3 pre and 3 post points are dropped to avoid noise
- * from one-sided windows.
+ * Aggregate stats over a filtered event set: mean ± stdev of net moves and
+ * window ranges. Events without a usable move are simply skipped.
  */
 export function computeStats(events) {
   const moves = [];
   const ranges = [];
   for (const ev of events) {
-    if (!ev.yields || ev.yields.length < 6) continue;
-    const pre = [];
-    const post = [];
-    for (const p of ev.yields) {
-      if (p.date <= ev.date) pre.push(p.y); else post.push(p.y);
-    }
-    if (pre.length < 3 || post.length < 3) continue;
-
-    const ys = ev.yields.map(p => p.y);
-    moves.push((mean(post) - mean(pre)) * 100);   // pct -> bps
-    ranges.push((Math.max(...ys) - Math.min(...ys)) * 100);
+    const m = eventMove(ev);
+    if (m == null) continue;
+    moves.push(m);
+    const r = eventRange(ev);
+    if (r != null) ranges.push(r);
   }
   return {
     n: moves.length,
