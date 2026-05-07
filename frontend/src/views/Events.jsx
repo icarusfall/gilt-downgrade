@@ -4,8 +4,65 @@ import Filters from '../components/Filters';
 import {
   loadDataset, PLOT_LAYOUT_DEFAULTS, AGENCY_COLOR,
   eventDirection, computeStats, eventMove, hasUsefulYields,
-  eventPrePostMeans, fmtBps,
+  eventPrePostMeans, fmtBps, DEFAULT_POLICY,
 } from '../lib/dataset';
+
+const WINDOW_OPTIONS = [
+  { id: 7,   label: '1w'  },
+  { id: 14,  label: '2w'  },
+  { id: 30,  label: '1m'  },
+  { id: 90,  label: '3m'  },
+  { id: 180, label: '6m'  },
+  { id: 365, label: '1y'  },
+];
+
+const MODE_OPTIONS = [
+  { id: 'avg',  label: 'Average' },
+  { id: 'edge', label: 'Edge'    },
+];
+
+function PolicyControls({ policy, setPolicy }) {
+  return (
+    <>
+      <div className="filter-group">
+        <span className="filter-label">Pre window</span>
+        <div className="toggle-group">
+          {WINDOW_OPTIONS.map(o => (
+            <button
+              key={o.id}
+              className={`toggle-btn ${policy.preDays === o.id ? 'active' : ''}`}
+              onClick={() => setPolicy(p => ({ ...p, preDays: o.id }))}
+            >{o.label}</button>
+          ))}
+        </div>
+      </div>
+      <div className="filter-group">
+        <span className="filter-label">Post window</span>
+        <div className="toggle-group">
+          {WINDOW_OPTIONS.map(o => (
+            <button
+              key={o.id}
+              className={`toggle-btn ${policy.postDays === o.id ? 'active' : ''}`}
+              onClick={() => setPolicy(p => ({ ...p, postDays: o.id }))}
+            >{o.label}</button>
+          ))}
+        </div>
+      </div>
+      <div className="filter-group">
+        <span className="filter-label" title="Average across the window, or the value at the far edge of the window">Aggregation</span>
+        <div className="toggle-group">
+          {MODE_OPTIONS.map(o => (
+            <button
+              key={o.id}
+              className={`toggle-btn ${policy.mode === o.id ? 'active' : ''}`}
+              onClick={() => setPolicy(p => ({ ...p, mode: o.id }))}
+            >{o.label}</button>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
 
 const DEFAULT_FILTERS = {
   agencies: ["Moody's", "S&P", "Fitch"],
@@ -24,7 +81,7 @@ function isCurrencyExcluded(ev, f) {
   return true;
 }
 
-function matchesNonCurrency(ev, f) {
+function matchesNonCurrency(ev, f, policy) {
   if (!f.agencies.includes(ev.agency)) return false;
 
   const dir = eventDirection(ev.notches);
@@ -40,13 +97,13 @@ function matchesNonCurrency(ev, f) {
     if (ev.notches == null || Math.abs(ev.notches) < 2) return false;
   }
 
-  if (f.yields === 'only' && !hasUsefulYields(ev)) return false;
+  if (f.yields === 'only' && !hasUsefulYields(ev, policy)) return false;
 
   return true;
 }
 
-function matchesFilters(ev, f) {
-  return matchesNonCurrency(ev, f) && !isCurrencyExcluded(ev, f);
+function matchesFilters(ev, f, policy) {
+  return matchesNonCurrency(ev, f, policy) && !isCurrencyExcluded(ev, f);
 }
 
 function formatRating(r) { return r ?? '—'; }
@@ -80,8 +137,19 @@ function chipTooltip(stat) {
   return lines.join('\n');
 }
 
-function StatsStrip({ stats, totalCount, matchedCount, currencyStats, excluded, onToggleCcy, onResetCcy, onGbpComparator }) {
+function windowLabel(days) {
+  if (days >= 365) return '1y';
+  if (days >= 30 && days % 30 === 0) return `${days / 30}m`;
+  if (days % 7 === 0) return `${days / 7}w`;
+  return `${days}d`;
+}
+
+function StatsStrip({ stats, totalCount, matchedCount, currencyStats, excluded, onToggleCcy, onResetCcy, onGbpComparator, policy }) {
   const moveClass = stats.move_mean > 0 ? 'up' : stats.move_mean < 0 ? 'down' : '';
+  const windowDesc = `${windowLabel(policy.preDays)} → ${windowLabel(policy.postDays)}`;
+  const moveDesc = policy.mode === 'edge'
+    ? 'bps, post end − pre start'
+    : 'bps, post avg − pre avg';
   return (
     <div className="stats">
       <div className="stat">
@@ -90,18 +158,18 @@ function StatsStrip({ stats, totalCount, matchedCount, currencyStats, excluded, 
         <span className="stat-note">of {totalCount} ({stats.n} with yields)</span>
       </div>
       <div className="stat">
-        <span className="stat-label">Net 12mo yield move</span>
+        <span className="stat-label">Net yield move ({windowDesc})</span>
         <span className={`stat-value ${moveClass}`}>
           {fmtBps(stats.move_mean)} <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 400 }}>± {fmtBps(stats.move_std)}</span>
         </span>
-        <span className="stat-note">bps, post-event avg − pre</span>
+        <span className="stat-note">{moveDesc}</span>
       </div>
       <div className="stat">
         <span className="stat-label">Window range</span>
         <span className="stat-value">
           {fmtBps(stats.range_mean)} <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 400 }}>± {fmtBps(stats.range_std)}</span>
         </span>
-        <span className="stat-note">bps, max − min in ±12mo</span>
+        <span className="stat-note">bps, max − min in window</span>
       </div>
       <div className="stat" style={{ flex: 1, minWidth: 260 }}>
         <div className="ccy-header">
@@ -138,6 +206,7 @@ export default function Events() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [policy, setPolicy] = useState(DEFAULT_POLICY);
   const [selectedId, setSelectedId] = useState(null);
 
   useEffect(() => {
@@ -167,18 +236,18 @@ export default function Events() {
   const filtered = useMemo(() => {
     if (!data) return [];
     return data.events
-      .filter(ev => matchesFilters(ev, filters))
+      .filter(ev => matchesFilters(ev, filters, policy))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [data, filters]);
+  }, [data, filters, policy]);
 
-  const stats = useMemo(() => computeStats(filtered), [filtered]);
+  const stats = useMemo(() => computeStats(filtered, policy), [filtered, policy]);
 
   // Currency chips show all currencies that would be present if the user
   // hadn't applied any currency exclusions, so excluded chips remain visible
   // and can be re-enabled with one click.
   const currencyStats = useMemo(() => {
     if (!data) return [];
-    const candidates = data.events.filter(ev => matchesNonCurrency(ev, filters));
+    const candidates = data.events.filter(ev => matchesNonCurrency(ev, filters, policy));
     const grouped = new Map();   // ccy -> { events: [], countries: Map<iso2, count> }
     for (const ev of candidates) {
       const c = ev.currency_at_event;
@@ -189,7 +258,7 @@ export default function Events() {
     }
     const out = [];
     for (const [ccy, g] of grouped) {
-      const moves = g.events.map(eventMove).filter(x => x != null);
+      const moves = g.events.map(ev => eventMove(ev, policy)).filter(x => x != null);
       const avg = moves.length ? moves.reduce((a, b) => a + b, 0) / moves.length : NaN;
       const countries = [...g.countries.entries()]
         .map(([iso, n]) => [countryByIso[iso]?.name || iso, n])
@@ -197,7 +266,7 @@ export default function Events() {
       out.push({ ccy, n: g.events.length, n_with_move: moves.length, move_mean: avg, countries });
     }
     return out.sort((a, b) => b.n - a.n);
-  }, [data, filters, countryByIso]);
+  }, [data, filters, policy, countryByIso]);
 
   const toggleCcy = (ccy) => setFilters(f => ({
     ...f,
@@ -215,7 +284,7 @@ export default function Events() {
   }));
   // Default selection = most recent event with enough surrounding yield data
   // to be analysable, so the chart isn't empty when you land on the page.
-  const firstUseful = filtered.find(hasUsefulYields);
+  const firstUseful = filtered.find(ev => hasUsefulYields(ev, policy));
   const selected = filtered.find(e => e.id === selectedId) || firstUseful || filtered[0] || null;
 
   if (error) return <div className="error">Failed to load dataset: {error}</div>;
@@ -223,7 +292,9 @@ export default function Events() {
 
   return (
     <div className="view">
-      <Filters filters={filters} setFilters={setFilters} />
+      <Filters filters={filters} setFilters={setFilters}>
+        <PolicyControls policy={policy} setPolicy={setPolicy} />
+      </Filters>
       <StatsStrip
         stats={stats}
         totalCount={data.events.length}
@@ -233,6 +304,7 @@ export default function Events() {
         onToggleCcy={toggleCcy}
         onResetCcy={resetCcy}
         onGbpComparator={gbpComparator}
+        policy={policy}
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.3fr)', gap: 16 }}>
@@ -254,8 +326,8 @@ export default function Events() {
               {filtered.slice(0, 500).map(ev => {
                 const country = countryByIso[ev.country_iso2];
                 const isSel = selected && selected.id === ev.id;
-                const hasY = hasUsefulYields(ev);
-                const move = eventMove(ev);
+                const hasY = hasUsefulYields(ev, policy);
+                const move = eventMove(ev, policy);
                 const moveCls = move == null ? '' : move > 0 ? 'move-up' : move < 0 ? 'move-down' : '';
                 return (
                   <tr
@@ -300,6 +372,7 @@ export default function Events() {
           event={selected}
           country={selected ? countryByIso[selected.country_iso2] : null}
           lastYieldDate={selected ? lastYieldByCountry[selected.country_iso2] : null}
+          policy={policy}
         />
       </div>
     </div>
@@ -319,7 +392,7 @@ function emptyReason(event, country, lastYieldDate) {
   return `No yield data available for ${country?.name || event.country_iso2} in this window.`;
 }
 
-function EventDetail({ event, country, lastYieldDate }) {
+function EventDetail({ event, country, lastYieldDate, policy }) {
   if (!event) {
     return <div className="detail-panel detail-empty">Select an event to view its yield window.</div>;
   }
@@ -342,43 +415,42 @@ function EventDetail({ event, country, lastYieldDate }) {
       hovertemplate: '%{x|%Y-%m-%d}<br>%{y:.2f}%<extra></extra>',
     });
 
-    // Pre/post mean overlays — make the "net move" stat literally visible
-    const means = eventPrePostMeans(event);
+    // Pre/post overlays — make the "net move" calc literally visible.
+    // The line span and labels reflect the user's chosen window + mode.
+    const means = eventPrePostMeans(event, policy);
     if (means) {
-      const preDates = event.yields.filter(p => p.date <= event.date);
-      const postDates = event.yields.filter(p => p.date > event.date);
-      const firstPre = preDates[0].date;
-      const lastPost = postDates[postDates.length - 1].date;
-      const move = (means.post_mean - means.pre_mean) * 100;   // bps
+      const move = (means.post_val - means.pre_val) * 100;  // bps
       const postColor = move > 5 ? '#b91c1c' : move < -5 ? '#15803d' : '#78716c';
+      const preLabel  = policy.mode === 'edge' ? 'pre start' : 'pre avg';
+      const postLabel = policy.mode === 'edge' ? 'post end'  : 'post avg';
 
       traces.push({
-        x: [firstPre, event.date],
-        y: [means.pre_mean, means.pre_mean],
+        x: [means.pre_anchor, event.date],
+        y: [means.pre_val, means.pre_val],
         type: 'scatter', mode: 'lines',
         line: { color: '#78716c', width: 1.5, dash: 'dash' },
-        name: `pre avg ${means.pre_mean.toFixed(2)}%`,
-        hovertemplate: `pre-event mean: %{y:.2f}%<extra></extra>`,
+        name: `${preLabel} ${means.pre_val.toFixed(2)}%`,
+        hovertemplate: `${preLabel}: %{y:.2f}%<extra></extra>`,
       });
       traces.push({
-        x: [event.date, lastPost],
-        y: [means.post_mean, means.post_mean],
+        x: [event.date, means.post_anchor],
+        y: [means.post_val, means.post_val],
         type: 'scatter', mode: 'lines',
         line: { color: postColor, width: 1.5, dash: 'dash' },
-        name: `post avg ${means.post_mean.toFixed(2)}% (${fmtBps(move)} bps)`,
-        hovertemplate: `post-event mean: %{y:.2f}%<extra></extra>`,
+        name: `${postLabel} ${means.post_val.toFixed(2)}% (${fmtBps(move)} bps)`,
+        hovertemplate: `${postLabel}: %{y:.2f}%<extra></extra>`,
       });
 
       annotations.push({
-        x: firstPre, y: means.pre_mean, xanchor: 'left', yanchor: 'bottom',
-        text: `${means.pre_mean.toFixed(2)}%`,
+        x: means.pre_anchor, y: means.pre_val, xanchor: 'left', yanchor: 'bottom',
+        text: `${preLabel} ${means.pre_val.toFixed(2)}%`,
         showarrow: false,
         font: { size: 10, color: '#59544c', family: 'JetBrains Mono, monospace' },
         bgcolor: 'rgba(255,255,255,0.85)', borderpad: 2,
       });
       annotations.push({
-        x: lastPost, y: means.post_mean, xanchor: 'right', yanchor: 'bottom',
-        text: `${means.post_mean.toFixed(2)}% (${fmtBps(move)} bps)`,
+        x: means.post_anchor, y: means.post_val, xanchor: 'right', yanchor: 'bottom',
+        text: `${postLabel} ${means.post_val.toFixed(2)}% (${fmtBps(move)} bps)`,
         showarrow: false,
         font: { size: 10, color: postColor, family: 'JetBrains Mono, monospace' },
         bgcolor: 'rgba(255,255,255,0.85)', borderpad: 2,

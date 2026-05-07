@@ -39,7 +39,7 @@ function ToggleSet({ options, selected, onToggle, mode = 'multi' }) {
   );
 }
 
-export default function Filters({ filters, setFilters }) {
+export default function Filters({ filters, setFilters, children }) {
   const toggleAgency = (a) => setFilters(f => ({
     ...f,
     agencies: f.agencies.includes(a) ? f.agencies.filter(x => x !== a) : [...f.agencies, a],
@@ -75,6 +75,8 @@ export default function Filters({ filters, setFilters }) {
           onToggle={id => setFilters(f => ({ ...f, yields: id }))}
         />
       </div>
+
+      {children}
     </div>
   );
 }

@@ -52,65 +52,92 @@ const stdev = (xs) => {
   return Math.sqrt(xs.reduce((s, x) => s + (x - m) ** 2, 0) / (xs.length - 1));
 };
 
-// Minimum number of monthly yield points required *after* the event for a
-// post-window to be useful. 6 months is enough to show whether the market
-// reacted; less than that often means the yield series ends shortly after
-// the event and a reading would be misleading.
-const MIN_POST_POINTS = 6;
-const MIN_PRE_POINTS  = 3;
+export const DEFAULT_POLICY = { preDays: 365, postDays: 365, mode: 'avg' };
 
-/** Split a yield window into (pre, post) arrays around the event date. */
-function splitWindow(ev) {
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Add `days` (positive or negative) to an ISO YYYY-MM-DD string. */
+function addDays(iso, days) {
+  const d = new Date(iso + 'T00:00:00Z');
+  return new Date(d.getTime() + days * DAY_MS).toISOString().slice(0, 10);
+}
+
+/**
+ * Split an event's yield series into the pre and post sub-windows defined by
+ * the policy. Each sub-window is the points within `days` of the event date,
+ * on the appropriate side. Both arrays are sorted ascending by date.
+ */
+export function splitWindow(ev, policy = DEFAULT_POLICY) {
   const pre = [], post = [];
   if (!ev.yields) return { pre, post };
+  const preCutoff  = addDays(ev.date, -policy.preDays);
+  const postCutoff = addDays(ev.date,  policy.postDays);
   for (const p of ev.yields) {
-    if (p.date <= ev.date) pre.push(p.y); else post.push(p.y);
+    if (p.date >= preCutoff && p.date <= ev.date) pre.push(p);
+    else if (p.date > ev.date && p.date <= postCutoff) post.push(p);
   }
+  pre.sort((a, b) => a.date.localeCompare(b.date));
+  post.sort((a, b) => a.date.localeCompare(b.date));
   return { pre, post };
 }
 
-/** True iff the event has enough surrounding yield data to be analysable. */
-export function hasUsefulYields(ev) {
-  const { pre, post } = splitWindow(ev);
-  return pre.length >= MIN_PRE_POINTS && post.length >= MIN_POST_POINTS;
-}
-
-/** Pre/post means in pct (not bps), or null if either side is too sparse. */
-export function eventPrePostMeans(ev) {
-  const { pre, post } = splitWindow(ev);
-  if (pre.length < MIN_PRE_POINTS || post.length < MIN_POST_POINTS) return null;
-  return { pre_mean: mean(pre), post_mean: mean(post) };
+/** True iff there's at least one point in each user-chosen window. */
+export function hasUsefulYields(ev, policy = DEFAULT_POLICY) {
+  const { pre, post } = splitWindow(ev, policy);
+  return pre.length >= 1 && post.length >= 1;
 }
 
 /**
- * Per-event "net 12mo yield move" = mean(post-event yields) − mean(pre-event
- * yields), in bps. Returns null if the window doesn't meet the minimum
- * pre/post point thresholds.
+ * Aggregated pre and post values according to the policy mode:
+ *   - 'avg':  mean of all points in the window
+ *   - 'edge': pre = earliest point in pre window (start of lead-up)
+ *             post = latest point in post window (end of period)
+ * Returns { pre_val, post_val, pre_anchor, post_anchor } where the anchors
+ * are the date strings at which to draw the chart marker.
+ * Returns null if either side has zero points.
  */
-export function eventMove(ev) {
-  const { pre, post } = splitWindow(ev);
-  if (pre.length < MIN_PRE_POINTS || post.length < MIN_POST_POINTS) return null;
-  return (mean(post) - mean(pre)) * 100;
+export function eventPrePostMeans(ev, policy = DEFAULT_POLICY) {
+  const { pre, post } = splitWindow(ev, policy);
+  if (!pre.length || !post.length) return null;
+  if (policy.mode === 'edge') {
+    return {
+      pre_val:    pre[0].y,
+      post_val:   post[post.length - 1].y,
+      pre_anchor: pre[0].date,
+      post_anchor: post[post.length - 1].date,
+    };
+  }
+  return {
+    pre_val:    mean(pre.map(p => p.y)),
+    post_val:   mean(post.map(p => p.y)),
+    pre_anchor: pre[0].date,           // line spans from start of window
+    post_anchor: post[post.length - 1].date,
+  };
 }
 
-export function eventRange(ev) {
-  if (!hasUsefulYields(ev)) return null;
-  const ys = ev.yields.map(p => p.y);
+/** Per-event net move in bps under the given policy, or null if not computable. */
+export function eventMove(ev, policy = DEFAULT_POLICY) {
+  const m = eventPrePostMeans(ev, policy);
+  return m ? (m.post_val - m.pre_val) * 100 : null;
+}
+
+/** Max − min in bps within the *combined* pre+post window. */
+export function eventRange(ev, policy = DEFAULT_POLICY) {
+  const { pre, post } = splitWindow(ev, policy);
+  const ys = [...pre, ...post].map(p => p.y);
+  if (!ys.length) return null;
   return (Math.max(...ys) - Math.min(...ys)) * 100;
 }
 
-/**
- * Aggregate stats over a filtered event set: mean ± stdev of net moves and
- * window ranges. Events without a usable move are simply skipped.
- */
-export function computeStats(events) {
+/** Aggregate stats over a filtered event set, using the given policy. */
+export function computeStats(events, policy = DEFAULT_POLICY) {
   const moves = [];
   const ranges = [];
   for (const ev of events) {
-    const m = eventMove(ev);
+    const m = eventMove(ev, policy);
     if (m == null) continue;
     moves.push(m);
-    const r = eventRange(ev);
+    const r = eventRange(ev, policy);
     if (r != null) ranges.push(r);
   }
   return {
